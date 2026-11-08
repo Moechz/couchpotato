@@ -1,0 +1,141 @@
+app_id: couchpotatodocker
+title: CouchPotato
+image: linuxserver/couchpotato:7260c12f-ls82
+repo_name: couchpotato
+mode: wrapper
+entrypoint_file: src/entrypoint.sh
+wrapper_note: 'the upstream image boots with the s6-overlay v2 init (/init), which is built to
+
+  run as root: with user "1000:1000" s6 cannot spawn the service ("unable to exec
+
+  run: Permission denied") and the container stays up with nothing listening.
+
+  TOS forbids root containers, so src/entrypoint.sh skips s6 and runs the bundled
+
+  Python 2 application directly as the unprivileged container user.
+
+  '
+wrapper_note_readme: '- **Entrypoint wrapper** (not a privilege shim): the image''s s6 init cannot run
+  without root, so `src/entrypoint.sh` skips it and starts the bundled CouchPotato Python 2 application
+  directly as the unprivileged container user.'
+user_mode_text: 上游镜像默认以 root 启动 s6，入口包装改为直接以 uid 1000 运行上游 Python 应用
+user_mode_cons: "- 上游镜像的 `/init` 是 s6-overlay v2，整套服务管理都在 root 下运行；`user: \"1000:1000\"` 时实测\n  报 `s6-supervise\
+  \ (child): fatal: unable to exec run: Permission denied`，容器 Up 但 5050 无人监听。\n  因此 `src/entrypoint.sh`\
+  \ 跳过 s6，直接以容器用户执行 `python /app/couchpotato/CouchPotato.py`。\n- 应用本身不需要 root：配置、数据库、日志、缓存全部在挂载卷 `/config`\
+  \ 内（平台 chown 给 1000），\n  镜像里的 `/app` 只读即可；实测非 root 下首页返回 HTTP 200。\n"
+container_port: 5050
+platform: x86_64
+platforms:
+- x86_64
+- aarch64
+category:
+- Download
+user: 1000:1000
+volumes:
+- host: /Volume1/DockerAppData/couchpotatodocker/config
+  container: /config
+- host: /Volume1/DockerAppData/couchpotatodocker/downloads
+  container: /downloads
+env:
+  TZ: Asia/Shanghai
+healthcheck:
+- CMD-SHELL
+- curl -s -o /dev/null http://127.0.0.1:5050/ || exit 1
+healthcheck_interval: 30s
+healthcheck_timeout: 10s
+healthcheck_retries: 5
+healthcheck_start_period: 90s
+healthcheck_note: 探测首页 `/`：应用能应答即视为可用（首次启动要初始化数据库与缓存，`start_period` 给 90s）。
+auth: CouchPotato
+upstream_url: https://github.com/CouchPotato/CouchPotatoServer
+upstream_license: GPL-3.0
+license: GPL-3.0
+official: https://github.com/CouchPotato/CouchPotatoServer
+help: https://github.com/Moechz/couchpotato/issues
+upstream_version: 3.0.1
+version: 3.0.1-1
+descript: CouchPotato is a movie automation manager for your NAS. Keep a wanted list and it searches NZB
+  and torrent indexers on a schedule, sends the best release to SABnzbd, NZBget or Transmission, then
+  renames and files the finished movie. This package runs the LinuxServer.io Docker image as a non-root
+  container and keeps the wanted list, settings, database and logs in the application data folder.
+important: 'Requires DockerEngine (the App Center installs it if missing). The image is pulled from Docker
+  Hub at install time; add a registry mirror in DockerEngine if your NAS cannot reach Docker Hub. Open
+  the app from its desktop icon. CouchPotato is legacy software that no longer receives upstream updates:
+  it works, but treat it as unmaintained. Settings and the movie database live in the application data
+  folder - back it up before uninstalling with data removal.'
+release_note: '1. First release: CouchPotato from the LinuxServer.io Docker Hub image, running as a non-root
+  container. Wanted list, settings and logs are kept in the application data folder.'
+data_notes: 'Two volumes hold everything CouchPotato writes: `config/` with `config.ini` (all settings,
+  the API key and the indexer/downloader configuration) and `data/` (SQLite database, logs, artwork cache,
+  custom plugins), plus `downloads/` for the files CouchPotato fetches. Copying the `couchpotatodocker`
+  folder is therefore a complete backup.'
+design_notes:
+- '**Non-root by construction.** The s6 init of the image needs root, so the wrapper starts the bundled
+  Python 2 application directly as `1000:1000`; verified on real hardware with `id` inside the container.'
+- '**Fixed image tag `7260c12f-ls82`**, Docker Hub only, no `privileged`, no `network_mode: host`, no
+  `cap_add`, no Docker socket.'
+- '**Two explicit volumes**: `/config` (settings and database) and `/downloads` (fetched files), both
+  below `/Volume1/DockerAppData/couchpotatodocker/`.'
+- '**Health check** on the UI itself (`GET /` on port 5050) with a 90 s start period for the first database
+  initialisation.'
+limitations:
+- 'CouchPotato is legacy software: upstream stopped in 2021 and the image was last built in March 2022.
+  It receives no security updates - run it on a trusted LAN only.'
+- 'TOS Docker applications cannot mount shared folders: downloads, the renamed library, the database and
+  the logs all stay in `/Volume1/DockerAppData/couchpotatodocker/`. Move finished movies to your media
+  share with File Manager.'
+- NZB/torrent indexers and the download client are configured in the web UI; some indexers need an account
+  or API key.
+- The UI is served over plain HTTP on the LAN. Do not expose the published port to the internet without
+  a TLS reverse proxy.
+runtime_files:
+- path: config/config.ini
+  purpose: all settings - core options, API key, indexers, downloaders, renamer rules
+  created: first start
+  growth: static, rewritten on every settings change
+  lifecycle: never overwritten by the app; keep it, it is the whole configuration
+- path: config/data/database
+  purpose: SQLite database with the wanted list, movie metadata and release history
+  created: first start
+  growth: grows with the size of the wanted list
+  lifecycle: managed by CouchPotato; back it up before uninstalling with data removal
+- path: config/data/logs
+  purpose: CouchPotato log files
+  created: first start
+  growth: one file per day; CouchPotato rotates them
+  lifecycle: safe to delete
+- path: config/data/cache
+  purpose: cached artwork and indexer responses
+  created: first start
+  growth: bounded by the cache settings of the app
+  lifecycle: safe to delete; it is rebuilt on demand
+- path: config/data/custom_plugins
+  purpose: optional third-party plugins dropped in by the user
+  created: first start (empty)
+  growth: only what the user adds
+  lifecycle: never touched by the app
+- path: downloads
+  purpose: files fetched by CouchPotato before renaming
+  created: on the first download
+  growth: grows with every movie
+  lifecycle: managed by CouchPotato; move finished files out to free space
+translations:
+  zh-cn:
+    descript: CouchPotato 是 NAS 上的电影自动化管理器：维护一个「想看」列表，它会定时在 NZB 与 BT 索引站搜索，把最合适的资源推送到 SABnzbd、NZBget 或
+      Transmission，下载完成后自动重命名并归档。本应用以非 root 容器运行 LinuxServer.io 的镜像，想看列表、设置、数据库与日志都保存在应用数据目录中，重启与更新都不会丢失。
+    important: 需要 DockerEngine（缺失时应用中心会提示安装）。镜像在安装时从 Docker Hub 拉取，若 NAS 无法直连请先在 DockerEngine 中配置镜像加速。从桌面图标打开应用。CouchPotato
+      已停止上游维护：仍可正常使用，但没有后续安全更新。设置与电影数据库保存在应用数据目录，卸载并删除数据前请先备份。
+    release_note: 1. 首次发布：来自 LinuxServer.io Docker Hub 镜像的 CouchPotato，以非 root 容器运行；想看列表、设置与日志保存在应用数据目录。
+  zh-hk:
+    descript: CouchPotato 是 NAS 上的電影自動化管理器：維護一個「想看」清單，它會定時在 NZB 與 BT 索引站搜尋，把最合適的資源送到 SABnzbd、NZBget 或
+      Transmission，下載完成後自動重新命名並歸檔。本應用以非 root 容器執行 LinuxServer.io 的映像，想看清單、設定、資料庫與日誌都保存在應用資料目錄中，重新啟動與更新都不會遺失。
+    important: 需要 DockerEngine（缺少時應用中心會提示安裝）。映像在安裝時從 Docker Hub 下載，若 NAS 無法直連請先在 DockerEngine 中設定映像加速。從桌面圖示開啟應用。CouchPotato
+      已停止上游維護：仍可正常使用，但沒有後續安全更新。設定與電影資料庫保存在應用資料目錄，解除安裝並刪除資料前請先備份。
+    release_note: 1. 首次發佈：來自 LinuxServer.io Docker Hub 映像的 CouchPotato，以非 root 容器執行；想看清單、設定與日誌保存在應用資料目錄。
+publisher: Moechz
+compose_project: couchpotatodocker
+github_repo: couchpotato
+release_tag_prefix: v
+docker_socket: false
+group_add: []
+host_port: 8005

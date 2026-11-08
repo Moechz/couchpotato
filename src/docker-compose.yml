@@ -1,0 +1,61 @@
+# ===========================================================================
+# CouchPotato for TerraMaster TOS 7 (Docker application)
+# ===========================================================================
+# Upstream image : linuxserver/couchpotato:7260c12f-ls82 (Docker Hub, used unmodified)
+#                  -> https://github.com/CouchPotato/CouchPotatoServer
+#
+# Ports   : host 8005 -> container 5050. The host port is in the
+#           TOS-recommended 8000-19999 range and is not one of the reserved
+#           ports (22/80/443/445/3306/5050/5432/6379/8181/8443).
+# Volumes : all persistent data lives below
+#           /Volume1/DockerAppData/couchpotatodocker/. The /Volume* wildcard is
+#           deliberately NOT used: the platform does not expand it.
+# TOS rules honoured: Docker Hub image with a fixed tag (never ':latest'),
+#           container_name == application id, restart: unless-stopped,
+#           non-root user, no privileged mode, no network_mode: host, no
+#           cap_add, explicit TZ, a healthcheck on the only service, and
+#           x-app-meta as the last block.
+# Wrapper : the upstream image boots with the s6-overlay v2 init (/init), which is built to
+#           run as root: with user "1000:1000" s6 cannot spawn the service ("unable to exec
+#           run: Permission denied") and the container stays up with nothing listening.
+#           TOS forbids root containers, so src/entrypoint.sh skips s6 and runs the bundled
+#           Python 2 application directly as the unprivileged container user.
+# Escaping: docker compose interpolates ${VAR}/$VAR in compose files, so any
+#           '$' meant for the shell is written '$$'.
+#
+# NOTE for maintainers: never place a comment line directly in front of a
+# "- value" sequence item (ports, volumes, ...). The official
+# TOSAppSelfTestingTool parses the compose file line by line; a comment inside
+# a sequence makes it skip its permission sync, the mounted directories stay
+# root-owned and the non-root container cannot write into them.
+
+services:
+  couchpotatodocker:
+    image: linuxserver/couchpotato:7260c12f-ls82
+    container_name: couchpotatodocker
+    restart: unless-stopped
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        @@ENTRYPOINT_SH@@
+    ports:
+      - "8005:5050"
+    environment:
+      TZ: "Asia/Shanghai"
+    volumes:
+      - /Volume1/DockerAppData/couchpotatodocker/config:/config
+      - /Volume1/DockerAppData/couchpotatodocker/downloads:/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:5050/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+# TOS App Center web metadata (must be the last block of the file):
+# web.port is the published host port above, protocol is http.
+x-app-meta:
+  web:
+    port: 8005
+    protocol: http
