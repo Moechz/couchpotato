@@ -48,7 +48,7 @@
   "official": "https://github.com/CouchPotato/CouchPotatoServer",
   "help": "https://github.com/Moechz/couchpotato/issues",
   "upstream_version": "3.0.1",
-  "version": "3.0.1-1",
+  "version": "3.0.1-2",
   "descript": "CouchPotato is a movie automation manager for your NAS. Keep a wanted list and it searches NZB and torrent indexers on a schedule, sends the best release to SABnzbd, NZBget or Transmission, then renames and files the finished movie. This package runs the LinuxServer.io Docker image as a non-root container and keeps the wanted list, settings, database and logs in the application data folder.",
   "important": "Requires DockerEngine (the App Center installs it if missing). The image is pulled from Docker Hub at install time; add a registry mirror in DockerEngine if your NAS cannot reach Docker Hub. Open the app from its desktop icon. CouchPotato is legacy software that no longer receives upstream updates: it works, but treat it as unmaintained. Settings and the movie database live in the application data folder - back it up before uninstalling with data removal.",
   "release_note": "1. First release: CouchPotato from the LinuxServer.io Docker Hub image, running as a non-root container. Wanted list, settings and logs are kept in the application data folder.",
